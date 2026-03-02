@@ -1,0 +1,92 @@
+@OCREngine_HostAddress = https://localhost:7139
+@taskId = tuantran-241afbcf-69e3-434a-9942-91db4c602995
+### 1. Upload & Process PDF
+# Upload PDF file and start processing
+POST {{OCREngine_HostAddress}}/api/ocr/process
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="ModelId"
+
+deepseekOcr
+--boundary123
+Content-Disposition: form-data; name="File"; filename="oanh_2504.pdf"
+Content-Type: application/pdf
+
+< ./data/oanh_2504.pdf
+--boundary123--
+
+### 2. Cancel Job
+# Cancel a running job using TaskId received from process step
+POST {{OCREngine_HostAddress}}/api/ocr/cancel?taskId={{taskId}}
+
+### 3. Get Markdown Result
+# Download the resulting markdown file
+# Replace {taskId} with actual ID
+GET {{OCREngine_HostAddress}}/api/ocr/get-markdown/{{taskId}}
+Accept: text/markdown
+### 4. Clear All Redis Streams (Test only)
+# Delete all ocr:stream:* keys from Redis
+DELETE {{OCREngine_HostAddress}}/api/ocr/clear-streams
+
+### 5. Predict Document Orientation (Single Image)
+# Predict orientation for a single image file
+POST {{OCREngine_HostAddress}}/api/orientation/predict
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="File"; filename="sample.jpg"
+Content-Type: image/jpeg
+
+< ./data/images/oanh_16.jpg
+--boundary123--
+
+### 6. Predict Document Orientation (Batch)
+# Predict orientation for multiple images
+POST {{OCREngine_HostAddress}}/api/orientation/predict-batch
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="Files"; filename="sample1.jpg"
+Content-Type: image/jpeg
+
+< ./data/sample1.jpg
+--boundary123
+Content-Disposition: form-data; name="Files"; filename="sample2.jpg"
+Content-Type: image/jpeg
+
+< ./data/sample2.jpg
+--boundary123--
+
+### 7. Test OCR Single Image (Synchronous)
+# OCR trực tiếp 1 file ảnh, trả kết quả ngay (không qua Hangfire)
+# Ảnh đã xử lý được lưu vào tmp_debug/ để kiểm tra chất lượng pipeline
+POST {{OCREngine_HostAddress}}/api/ocr/test-image
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="ModelId"
+
+DeepSeekOcr
+--boundary123
+Content-Disposition: form-data; name="MinImageDim"
+
+1536
+--boundary123
+Content-Disposition: form-data; name="TargetDpi"
+
+300
+--boundary123
+Content-Disposition: form-data; name="RotationDegrees"
+
+0
+--boundary123
+Content-Disposition: form-data; name="SaveProcessedImage"
+
+true
+--boundary123
+Content-Disposition: form-data; name="File"; filename="page_6.png"
+Content-Type: image/png
+
+< ./data/images/oanh_0.jpg
+--boundary123--

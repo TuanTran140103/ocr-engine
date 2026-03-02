@@ -1,0 +1,15 @@
+# Folders to ignore in Docker context
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/Logs
+**/TestResults
+**/data
+**/tmp_upload
+**/tmp_debug
+.dockerignore
+Dockerfile
+docker-compose.yml
+docker-compose.override.yml

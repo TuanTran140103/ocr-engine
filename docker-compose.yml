@@ -1,0 +1,47 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ocr-engine
+    ports:
+      - "5258:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      # Cấu hình Redis từ bên ngoài (Microservice share)
+      - Hangfire__RedisConnection=${REDIS_CONNECTION:-host.docker.internal:6379,abortConnect=false,password=MySecurePassword123}
+      # Cấu hình DocOri API nội bộ trong Docker Network
+      - ExternalServices__DocOri__BaseUrl=http://doc-ori:8000
+      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+    depends_on:
+      - doc-ori
+    restart: unless-stopped
+
+  doc-ori:
+    build:
+      context: D:/Project/doc_ori
+      dockerfile: v2.dockerfile
+    image: doc-ori:latest
+    container_name: doc-ori
+    ports:
+      - "8001:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLAGS_use_mkldnn=1
+      - OMP_NUM_THREADS=4
+      - KMP_DUPLICATE_LIB_OK=TRUE
+      - PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+    volumes:
+      - paddle_cache:/root/.paddleocr
+      - paddlex_cache:/root/.paddlex
+    shm_size: '2gb'
+    restart: unless-stopped
+
+volumes:
+  paddle_cache:
+  paddlex_cache:
+
+networks:
+  default:
+    name: ocr-network
