@@ -1,4 +1,4 @@
-@OCREngine_HostAddress = http://localhost:5258
+@OCREngine_HostAddress = https://localhost:7139
 @taskId = tuantran-241afbcf-69e3-434a-9942-91db4c602995
 ### 1. Upload & Process PDF
 # Upload PDF file and start processing
