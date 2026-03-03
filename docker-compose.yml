@@ -19,10 +19,7 @@ services:
     restart: unless-stopped
 
   doc-ori:
-    build:
-      context: D:/Project/doc_ori
-      dockerfile: v2.dockerfile
-    image: doc-ori:latest
+    image: tuantran2003/doc-ori:latest
     container_name: doc-ori
     ports:
       - "8001:8000"
