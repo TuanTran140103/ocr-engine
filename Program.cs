@@ -128,15 +128,19 @@ try
                 })
         );
 
-        // Single Hangfire server handling all OCR model queues with shared worker pool
-        builder.Services.AddHangfireServer(options =>
+        // Dedicated Hangfire servers for each OCR model to ensure parallel processing across models
+        string[] ocrQueues = new[] { "dots", "chandra", "deepseekocr" };
+        foreach (var queue in ocrQueues)
         {
-            options.WorkerCount = hangfireConfig.WorkerCount;
-            options.ServerName = $"OCREngine-WORKER-{Environment.MachineName}";
-            options.Queues = new[] { "dots", "chandra", "deepseekocr" };
-        });
+            builder.Services.AddHangfireServer(options =>
+            {
+                options.WorkerCount = hangfireConfig.WorkerCount;
+                options.ServerName = $"OCREngine-{queue.ToUpperInvariant()}-{Environment.MachineName}";
+                options.Queues = new[] { queue };
+            });
+        }
 
-        Log.Information("Hangfire configured with {WorkerCount} workers for OCR queues", hangfireConfig.WorkerCount);
+        Log.Information("Hangfire configured with dedicated servers for each OCR queue (WorkerCount={WorkerCount})", hangfireConfig.WorkerCount);
     }
 
     builder.Services.AddControllers()
