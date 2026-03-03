@@ -10,12 +10,16 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:80
       # Cấu hình Redis từ bên ngoài (Microservice share)
-      - Hangfire__RedisConnection=${REDIS_CONNECTION:-host.docker.internal:6379,abortConnect=false,password=MySecurePassword123}
+      # - Hangfire__RedisConnection=${REDIS_CONNECTION:-host.docker.internal:6379,abortConnect=false,password=MySecurePassword123}
       # Cấu hình DocOri API nội bộ trong Docker Network
       - ExternalServices__DocOri__BaseUrl=http://doc-ori:8000
       - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
     depends_on:
       - doc-ori
+    volumes:
+      - ./tmp_upload:/app/tmp_upload
+      - ./Outputs:/app/Outputs
+      - ./appsettings.json:/app/appsettings.json
     restart: unless-stopped
 
   doc-ori:

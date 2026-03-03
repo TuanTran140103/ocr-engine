@@ -28,4 +28,9 @@
     <PackageReference Include="SkiaSharp" Version="3.119.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Infrastructure\LuaScripts\*.lua">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

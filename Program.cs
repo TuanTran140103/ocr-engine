@@ -128,14 +128,15 @@ try
                 })
         );
 
+        // Single Hangfire server handling all OCR model queues with shared worker pool
         builder.Services.AddHangfireServer(options =>
         {
             options.WorkerCount = hangfireConfig.WorkerCount;
-            options.ServerName = $"OCREngine-{Environment.MachineName}";
-            options.Queues = new[] { "dots", "chandra", "deepseek", "default" };
+            options.ServerName = $"OCREngine-WORKER-{Environment.MachineName}";
+            options.Queues = new[] { "dots", "chandra", "deepseekocr" };
         });
 
-        Log.Information("Hangfire configured with {WorkerCount} workers", hangfireConfig.WorkerCount);
+        Log.Information("Hangfire configured with {WorkerCount} workers for OCR queues", hangfireConfig.WorkerCount);
     }
 
     builder.Services.AddControllers()

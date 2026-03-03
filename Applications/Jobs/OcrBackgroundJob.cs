@@ -410,10 +410,9 @@ public class OcrBackgroundJob
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex,
-                "[JOB] Task {TaskId} — orientation batch failed, using default rotation=0.",
-                taskId);
-            throw;
+            _logger.LogError(ex, "[JOB] Task {TaskId} — orientation batch failed. Stopping job as requested.", taskId);
+            // Throwing OperationCanceledException will be caught by the main loop and reported as 'Canceled'
+            throw new OperationCanceledException($"Orientation service unreachable or failed: {ex.Message}", ex);
         }
 
         return rotations;
