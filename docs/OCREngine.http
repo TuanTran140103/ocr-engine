@@ -1,0 +1,137 @@
+@client-request-timeout = 600000
+@OCREngine_HostAddress = https://localhost:7139
+@taskId = tuantran-44df0eb8-611f-4576-933e-631b0a45fe3c
+
+### 1. Upload & Process PDF
+# Upload PDF file and start processing`
+POST {{OCREngine_HostAddress}}/api/ocr/process
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="ModelId"
+
+ChandraOcr
+--boundary123
+Content-Disposition: form-data; name="File"; filename="test_75.pdf"
+Content-Type: application/pdf
+
+< ../data/test_75.pdf
+--boundary123--
+
+### 2. Cancel Job
+# Cancel a running job using TaskId received from process step
+POST {{OCREngine_HostAddress}}/api/ocr/cancel?taskId={{taskId}}
+
+### 3. Get Markdown Result
+# Download the resulting markdown file
+# Replace {taskId} with actual ID
+GET {{OCREngine_HostAddress}}/api/ocr/get-markdown/{{taskId}}
+Accept: text/markdown
+
+### 4. Get Supported Models
+# List all supported OCR models
+GET {{OCREngine_HostAddress}}/api/ocr/supported-models
+
+### 5. Predict Document Orientation (Single Image)
+# Predict orientation for a single image file
+POST {{OCREngine_HostAddress}}/api/orientation/predict
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="File"; filename="sample.jpg"
+Content-Type: image/jpeg
+
+< ./data/images/oanh_16.jpg
+--boundary123--
+
+### 6. Predict Document Orientation (Batch)
+# Predict orientation for multiple images
+POST {{OCREngine_HostAddress}}/api/orientation/predict-batch
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="Files"; filename="sample1.jpg"
+Content-Type: image/jpeg
+
+< ./data/sample1.jpg
+--boundary123
+Content-Disposition: form-data; name="Files"; filename="sample2.jpg"
+Content-Type: image/jpeg
+
+< ./data/sample2.jpg
+--boundary123--
+
+### 7. OCR Single Image (Synchronous) - TEST
+# OCR trực tiếp 1 file ảnh, trả kết quả ngay (không qua Hangfire)
+# Hỗ trợ tự động chuẩn hóa kích thước (MinImageDim) và render DPI (TargetDpi)
+# Ảnh đã xử lý được lưu vào tmp_debug/ để kiểm tra chất lượng pipeline if SaveProcessedImage=true
+POST {{OCREngine_HostAddress}}/api/test/ocr-image
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="ModelId"
+
+DeepSeekOcr
+--boundary123
+Content-Disposition: form-data; name="MinImageDim"
+
+1536
+--boundary123
+Content-Disposition: form-data; name="TargetDpi"
+
+300
+--boundary123
+Content-Disposition: form-data; name="RotationDegrees"
+
+0
+--boundary123
+Content-Disposition: form-data; name="PageIndex"
+
+4
+--boundary123
+Content-Disposition: form-data; name="UseOriginalImage"
+
+true
+--boundary123
+Content-Disposition: form-data; name="SaveProcessedImage"
+
+false
+--boundary123
+Content-Disposition: form-data; name="File"; filename="sample_image.png"
+Content-Type: image/png
+
+< ./data/images/test_75_17.jpg
+--boundary123--
+
+### 8. OCR Single Image (Original - No Enhance) - TEST
+# OCR trực tiếp với ảnh gốc, KHÔNG enhance (không resize, không rotate, không 28-multiple)
+# Dùng khi muốn test OCR với ảnh nguyên bản
+POST {{OCREngine_HostAddress}}/api/test/ocr-image
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="ModelId"
+
+DeepSeekOcr
+--boundary123
+Content-Disposition: form-data; name="UseOriginalImage"
+
+false
+--boundary123
+Content-Disposition: form-data; name="PageIndex"
+
+4
+--boundary123
+Content-Disposition: form-data; name="SaveProcessedImage"
+
+true
+--boundary123
+Content-Disposition: form-data; name="File"; filename="sample_image.png"
+Content-Type: image/png
+
+< ./data/images/test_75_17.jpg
+--boundary123--
+
+### 9. Clear All Redis Streams (Test only)
+# Delete all ocr:events:stream keys from Redis
+DELETE {{OCREngine_HostAddress}}/api/test/clear-streams

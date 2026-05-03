@@ -1,0 +1,368 @@
+@OCREngine_HostAddress = https://localhost:7139
+@pdfFile = ./../data/test_10.pdf
+
+### ========================================
+=== PDF Helper Test Endpoints
+=== Controller: api/test/pdf
+========================================
+
+
+### 2. Render Single Page with Custom DPI
+# Render với DPI cao hơn (300 DPI) để có ảnh nét hơn
+# File cũng được lưu vào tmp_pdf_test/page_{pageIndex}_render.png
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-page
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="pageIndex"
+
+2
+--boundary123
+Content-Disposition: form-data; name="targetDpi"
+
+200
+--boundary123--
+
+### 3. Render All Pages to Local Directory
+# Render TẤT CẢ các trang và lưu vào tmp_pdf_test/
+# Response: JSON với danh sách file và download URL
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-to-local
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123--
+
+### 4. Render All Pages with Custom Settings
+# Render với PNG format, quality cao
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-to-local
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="targetDpi"
+
+200
+--boundary123
+Content-Disposition: form-data; name="format"
+
+jpeg
+--boundary123
+Content-Disposition: form-data; name="quality"
+
+95
+--boundary123--
+
+### 5. Download Rendered Image
+# Tải ảnh đã render từ thư mục test (sau khi chạy render-to-local)
+# Thay đổi file=page_0.jpeg tùy theo file được tạo ra
+GET {{OCREngine_HostAddress}}/api/test/pdf/download?file=page_0.jpeg
+
+### 6. Get PDF Page Count
+# Đếm số trang của PDF
+POST {{OCREngine_HostAddress}}/api/test/pdf/page-count
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123--
+
+### 7. Get Page Dimensions
+# Lấy kích thước (width x height) của trang cụ thể
+POST {{OCREngine_HostAddress}}/api/test/pdf/page-dimensions
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="pageIndex"
+
+0
+--boundary123--
+
+### 8. Render Thumbnail for Orientation
+# Render thumbnail nhỏ để test orientation detection
+# Tự động resize để max dimension = 512px
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-thumbnail
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="pageIndex"
+
+0
+--boundary123
+Content-Disposition: form-data; name="maxDim"
+
+512
+--boundary123
+Content-Disposition: form-data; name="renderDpi"
+
+150
+--boundary123
+Content-Disposition: form-data; name="quality"
+
+90
+--boundary123--
+
+### 9. Render Thumbnail as PNG
+# Render thumbnail định dạng PNG thay vì JPEG
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-thumbnail
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="pageIndex"
+
+1
+--boundary123
+Content-Disposition: form-data; name="maxDim"
+
+256
+--boundary123
+Content-Disposition: form-data; name="usePng"
+
+true
+--boundary123--
+
+### 10. Render from Stream (Test Stream Overload)
+# Test overload nhận Stream thay vì file path
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-from-stream
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="pageIndex"
+
+0
+--boundary123
+Content-Disposition: form-data; name="targetDpi"
+
+200
+--boundary123--
+
+### 11. Render with Custom Dimensions (Test PageDimensions)
+# Test overload nhận PageDimensions thay vì DPI
+# Force kích thước cụ thể 800x600
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-with-dimensions
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="pageIndex"
+
+0
+--boundary123
+Content-Disposition: form-data; name="width"
+
+800
+--boundary123
+Content-Disposition: form-data; name="height"
+
+600
+--boundary123--
+
+### 12. Cleanup Test Output Directory
+# Xóa thư mục tmp_pdf_test sau khi test xong
+DELETE {{OCREngine_HostAddress}}/api/test/pdf/cleanup
+
+### ========================================
+=== Test Scenarios
+========================================
+
+### Scenario 1: Full Pipeline Test
+# 1. Check page count
+# 2. Get dimensions of first page
+# 3. Render all pages to local
+# 4. Download first page
+# Run these sequentially to verify full pipeline
+
+### Step 1: Check page count
+POST {{OCREngine_HostAddress}}/api/test/pdf/page-count
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123--
+
+### Step 2: Get dimensions
+POST {{OCREngine_HostAddress}}/api/test/pdf/page-dimensions
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="pageIndex"
+
+0
+--boundary123--
+
+### Step 3: Render all pages
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-to-local
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="format"
+
+jpeg
+--boundary123
+Content-Disposition: form-data; name="quality"
+
+95
+--boundary123--
+
+### Step 4: Download rendered image
+# Execute after render-to-local completes
+GET {{OCREngine_HostAddress}}/api/test/pdf/download?file=page_0.jpeg
+
+### Scenario 2: Compare DPI Quality
+# Render same page with different DPIs to compare quality
+
+### Low DPI (100)
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-page
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="pageIndex"
+
+0
+--boundary123
+Content-Disposition: form-data; name="targetDpi"
+
+100
+--boundary123--
+
+### Medium DPI (200)
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-page
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="pageIndex"
+
+0
+--boundary123
+Content-Disposition: form-data; name="targetDpi"
+
+200
+--boundary123--
+
+### High DPI (300)
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-page
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="pageIndex"
+
+0
+--boundary123
+Content-Disposition: form-data; name="targetDpi"
+
+300
+--boundary123--
+
+### Scenario 3: Test All Overloads
+# Verify all PdfHelper method overloads work correctly
+
+### Overload 1: RenderPdfPageAsync(string pdfPath, int pageIndex, int targetDpi)
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-page
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123--
+
+### Overload 2: RenderPdfPageAsync(Stream pdfStream, int pageIndex, int targetDpi)
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-from-stream
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123--
+
+### Overload 3: RenderPdfPageAsync(string pdfPath, int pageIndex, PageDimensions dimensions)
+POST {{OCREngine_HostAddress}}/api/test/pdf/render-with-dimensions
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< {{pdfFile}}
+--boundary123
+Content-Disposition: form-data; name="width"
+
+1024
+--boundary123
+Content-Disposition: form-data; name="height"
+
+768
+--boundary123--
+
+### Cleanup after all tests
+DELETE {{OCREngine_HostAddress}}/api/test/pdf/cleanup
