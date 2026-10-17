@@ -31,56 +31,42 @@ public class OcrController : ControllerBase
     }
 
     [HttpPost("process")]
-    [Consumes("multipart/form-data")]
-    public async Task<IActionResult> ProcessOcr([FromForm] OcrUploadRequest request)
+    public async Task<IActionResult> ProcessOcr([FromBody] OcrUploadRequest request)
     {
-        var file = request.File;
+        var bucket = request.Bucket;
+        var objectKey = request.ObjectKey;
         var modelId = request.ModelId;
-        if (file == null || file.Length == 0)
-            return BadRequest("No file uploaded.");
 
+        if (string.IsNullOrEmpty(bucket))
+            return BadRequest("Bucket is required.");
+        if (string.IsNullOrEmpty(objectKey))
+            return BadRequest("ObjectKey is required.");
         if (!LlmUtil.IsSupported(modelId))
             return BadRequest($"ModelId '{modelId}' is not supported. Supported models: {string.Join(", ", LlmUtil.supportedModels)}");
 
         string serverName = Regex.Replace(Environment.MachineName, "[^a-zA-Z0-9]", "").ToLowerInvariant();
         string taskId = $"{serverName}-{Guid.NewGuid()}";
-        string originalFileName = Path.GetFileName(file.FileName);
-
-        // Check if file essentially exists
-        var uploadPath = FileUtil.GetTempUploadPath();
-        var existingFile = Directory.GetFiles(uploadPath, $"*_{originalFileName}");
-        if (existingFile.Length > 0)
-        {
-            return Conflict($"File '{originalFileName}' is already being processed or exists in temporary storage.");
-        }
 
         try
         {
-            // Save file using FileUtil
-            string filePath = await FileUtil.SaveTempUploadFileAsync(file, taskId, originalFileName);
-
             // Enqueue Background Job with model-specific queue
             string queueName = modelId.Trim().ToLowerInvariant();
 
-            _logger.LogInformation("Enqueuing OCR job for TaskId: {TaskId}, Model: {ModelId}, Queue: {Queue}",
-                taskId, modelId, queueName);
+            _logger.LogInformation("Enqueuing OCR job for TaskId: {TaskId}, Model: {ModelId}, Queue: {Queue}, Bucket: {Bucket}, ObjectKey: {ObjectKey}",
+                taskId, modelId, queueName, bucket, objectKey);
 
-            // Enqueue và lấy JobId từ Hangfire
             string jobId = _backgroundJobClient.Enqueue<OcrBackgroundJob>(
                 queueName,
-                job => job.ProcessOcrTaskAsync(taskId, filePath, modelId, JobCancellationToken.Null));
+                job => job.ProcessOcrTaskAsync(taskId, bucket, objectKey, modelId, JobCancellationToken.Null));
 
-            // Lưu mapping taskId ↔ JobId
             await FileUtil.SaveJobMapping(taskId, jobId);
 
-            return Ok(new { TaskId = taskId, Message = "File uploaded and queued." });
+            return Ok(new { TaskId = taskId, Message = "File queued for processing from S3 storage." });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing file upload");
-            // Clean up if failed
-            await FileUtil.DeleteTempUploadFileAsync(taskId);
-            return StatusCode(500, "Internal server error during upload.");
+            _logger.LogError(ex, "Error enqueuing OCR job");
+            return StatusCode(500, "Internal server error.");
         }
     }
 

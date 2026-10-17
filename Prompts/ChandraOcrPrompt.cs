@@ -17,7 +17,7 @@ Guidelines:
 * Inline math: Surround math with <math>...</math> tags. Math expressions should be rendered in KaTeX-compatible LaTeX. Use display for block math.
 * Tables: Use colspan and rowspan attributes to match table structure.
 * Formatting: Maintain consistent formatting with the image, including spacing, indentation, subscripts/superscripts, and special characters.
-* Images: Include a description of any images in the alt attribute of an <img> tag. Do not fill out the src property.
+* Images: Include a description of any images in the alt attribute of an <img> tag. Do not fill out the src property. Describe in detail inside the div tag. Also convert charts to high fidelity data, and convert diagrams to mermaid.
 * Forms: Mark checkboxes and radio buttons properly.
 * Text: join lines together properly into paragraphs using <p>...</p> tags.  Use <br> tags for line breaks within paragraphs, but only when absolutely necessary to maintain meaning.
 * Chemistry: Use <chem>...</chem> tags for chemical formulas with reactive SMILES.

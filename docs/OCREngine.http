@@ -1,5 +1,5 @@
 @client-request-timeout = 600000
-@OCREngine_HostAddress = https://localhost:7139
+@OCREngine_HostAddress = http://localhost:5258
 @taskId = tuantran-44df0eb8-611f-4576-933e-631b0a45fe3c
 
 ### 1. Upload & Process PDF
@@ -10,12 +10,12 @@ Content-Type: multipart/form-data; boundary=boundary123
 --boundary123
 Content-Disposition: form-data; name="ModelId"
 
-ChandraOcr
+Dotsocr
 --boundary123
 Content-Disposition: form-data; name="File"; filename="test_75.pdf"
 Content-Type: application/pdf
 
-< ../data/test_75.pdf
+< ../data/test_35.pdf
 --boundary123--
 
 ### 2. Cancel Job

@@ -2,7 +2,8 @@ namespace OCREngine.Models;
 
 public class OcrUploadRequest
 {
-    public required IFormFile File { get; set; }
+    public required string Bucket { get; set; }
+    public required string ObjectKey { get; set; }
     public required string ModelId { get; set; }
 }
 

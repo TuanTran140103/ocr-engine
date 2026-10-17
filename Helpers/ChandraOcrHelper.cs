@@ -34,7 +34,7 @@ public static class ChandraOcrHelper
         var document = context.OpenAsync(req => req.Content(rawText)).GetAwaiter().GetResult();
 
         // Tìm tất cả các thẻ div có data-bbox HOẶC data-label
-        var divElements = document.QuerySelectorAll("div[data-bbox], div[data-label]");
+        var divElements = document.QuerySelectorAll("body > div[data-bbox], body > div[data-label]");
 
         foreach (var div in divElements)
         {
@@ -231,7 +231,16 @@ public static class ChandraOcrHelper
             else
             {
                 // Convert HTML sang Markdown
-                var md = ConvertHtmlToMarkdown(block.Text ?? string.Empty);
+                var htmlToConvert = block.Text ?? string.Empty;
+
+                if (block.Category == LayoutCategory.Title
+                    && !Regex.IsMatch(htmlToConvert, @"<h[1-6][\s>]", RegexOptions.IgnoreCase))
+                {
+                    htmlToConvert = GetPlainText(htmlToConvert);
+                    htmlToConvert = $"<h5>{htmlToConvert}</h5>";
+                }
+
+                var md = ConvertHtmlToMarkdown(htmlToConvert);
                 // Remove escape characters (\) trước các ký tự đặc biệt
                 md = UnescapeMarkdown(md);
                 markdown.AppendLine(md);
@@ -269,6 +278,17 @@ public static class ChandraOcrHelper
         md = Regex.Replace(md, @"\\([()_`\#\[\]+->])", "$1");
 
         return md;
+    }
+
+    /// <summary>
+    /// Extract plain text from HTML by stripping all tags using AngleSharp.
+    /// </summary>
+    private static string GetPlainText(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return html;
+        var context = BrowsingContext.New(Configuration.Default);
+        var doc = context.OpenAsync(req => req.Content($"<div>{html}</div>")).GetAwaiter().GetResult();
+        return doc.Body!.QuerySelector("div")!.TextContent.Trim();
     }
 
     /// <summary>

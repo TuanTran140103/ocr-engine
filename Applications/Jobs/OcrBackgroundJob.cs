@@ -20,6 +20,7 @@ public class OcrBackgroundJob
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IRedisService _redisService;
+    private readonly IS3Service _s3Service;
     private readonly ILogger<OcrBackgroundJob> _logger;
     private readonly LlmModelsOption _models;
     private readonly ExternalServiceOption _extOptions;
@@ -54,6 +55,7 @@ public class OcrBackgroundJob
     public OcrBackgroundJob(
         IServiceProvider serviceProvider,
         IRedisService redisService,
+        IS3Service s3Service,
         ILogger<OcrBackgroundJob> logger,
         IOptions<LlmModelsOption> modelsOptions,
         IOptions<ExternalServiceOption> extOptions,
@@ -62,6 +64,7 @@ public class OcrBackgroundJob
     {
         _serviceProvider = serviceProvider;
         _redisService = redisService;
+        _s3Service = s3Service;
         _logger = logger;
         _models = modelsOptions.Value;
         _extOptions = extOptions.Value;
@@ -75,7 +78,8 @@ public class OcrBackgroundJob
     [AutomaticRetry(Attempts = 0)]
     public async Task ProcessOcrTaskAsync(
         string taskId,
-        string pathPdf,
+        string bucket,
+        string objectKey,
         string modelId,
         IJobCancellationToken cancellationToken)
     {
@@ -85,10 +89,26 @@ public class OcrBackgroundJob
 
         var stopwatch = Stopwatch.StartNew();
 
+        // Step 0: Download file from S3/MinIO to local temp
+        _logger.LogInformation("[JOB] Task {TaskId} — downloading from S3: bucket={Bucket}, key={ObjectKey}", taskId, bucket, objectKey);
+        string pathPdf;
+        try
+        {
+            pathPdf = await _s3Service.DownloadFileAsync(bucket, objectKey, taskId, token);
+            _logger.LogInformation("[JOB] Task {TaskId} — downloaded to {Path}", taskId, pathPdf);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[JOB] Task {TaskId} — failed to download file from S3: bucket={Bucket}, key={ObjectKey}", taskId, bucket, objectKey);
+            await ReportEventAsync(taskId, $"{bucket}/{objectKey}", $"Failed to download from S3: {ex.Message}", null, EventStatus.Failed);
+            return;
+        }
+
         // Create resource manager for automatic cleanup
         await using var resources = new OcrJobResources(taskId, pathPdf, _logger);
 
         // Step 1: Report job started
+        _logger.LogInformation("[JOB] Task {TaskId} — job started (model={ModelId})", taskId, modelId);
         await ReportEventAsync(taskId, pathPdf, "Job Started", null, EventStatus.Started);
 
         // Step 2: Resolve model configuration & concurrency settings
@@ -103,6 +123,7 @@ public class OcrBackgroundJob
         // Step 4: Health check — verify API reachable before expensive work
         if (!await ocrEngine.PingAsync(token))
         {
+            _logger.LogError("[JOB] Task {TaskId} — API health check failed: no healthy stream", taskId);
             await ReportEventAsync(taskId, pathPdf, "API health check failed: no healthy stream", null, EventStatus.Failed);
             await ReportEventAsync(taskId, pathPdf, "Logs Summary", null, EventStatus.Succeeded, EventType.SaveLog);
             return;
@@ -156,28 +177,38 @@ public class OcrBackgroundJob
         string pathPdf,
         string modelId)
     {
+        _logger.LogInformation("[JOB] Task {TaskId} — ResolveModelConfigAsync: modelId={ModelId}", taskId, modelId);
+
         var modelEnumVal = LlmUtil.GetModelEnum(modelId);
         if (modelEnumVal == null)
         {
+            _logger.LogWarning("[JOB] Task {TaskId} — GetModelEnum returned null for '{ModelId}'", taskId, modelId);
             await ReportEventAsync(taskId, pathPdf, "Invalid modelId", null, EventStatus.Failed);
             return null;
         }
 
         var modelEnum = modelEnumVal.Value;
         string modelKey = modelEnum.ToString();
+        _logger.LogInformation("[JOB] Task {TaskId} — resolved enum={ModelKey}", taskId, modelKey);
 
         var modelOption = modelEnum switch
         {
             LlmSupport.DeepSeekOcr => _models.DeepSeek,
             LlmSupport.ChandraOcr => _models.Chandra,
+            LlmSupport.DotsOcr => _models.Dots,
             _ => null
         };
 
         if (modelOption == null)
         {
+            _logger.LogWarning("[JOB] Task {TaskId} — model config is null for '{ModelKey}'.", 
+                taskId, modelKey);
             await ReportEventAsync(taskId, pathPdf, $"Model configuration for {modelKey} not found", null, EventStatus.Failed);
             return null;
         }
+
+        _logger.LogInformation("[JOB] Task {TaskId} — resolved config: ModelName={Name}, Concurrency={Conc}",
+            taskId, modelOption.ModelName, modelOption.Concurrency);
 
         return (modelEnum, modelKey, modelOption.Concurrency);
     }
@@ -468,19 +499,28 @@ public class OcrBackgroundJob
             // }
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            bool shouldCancel = false;
             lock (_jobLock)
             {
                 if (!_isJobCancelled && !token.IsCancellationRequested)
                 {
                     _isJobCancelled = true;
-                    // _logger.LogError(ex,
-                    //     "[JOB] Task {TaskId} Page {Page}/{Total} — failed. Cancelling entire job.",
-                    //     taskId, pageIndex + 1, totalPages);
-                    jobCts.Cancel();
+                    shouldCancel = true;
+                    _logger.LogError(ex,
+                        "[JOB] Task {TaskId} Page {Page}/{Total} — failed after retries. Cancelling entire job.",
+                        taskId, pageIndex + 1, totalPages);
                 }
             }
+
+            if (shouldCancel)
+            {
+                await ReportEventAsync(taskId, pathPdf,
+                    $"Page {pageIndex + 1}/{totalPages} failed after retries: {ex.Message}", null, EventStatus.Failed);
+                jobCts.Cancel();
+            }
+
             throw;
         }
         finally
@@ -511,25 +551,37 @@ public class OcrBackgroundJob
 
         try
         {
-            _logger.LogInformation("[JOB] Task {TaskId} — sending all {Count} pages for orientation prediction...", taskId, totalPages);
+            int batchSize = _extOptions.DocOri.BatchSize;
+            int totalBatches = (int)Math.Ceiling((double)imagesToPredict.Count / batchSize);
 
-            var result = await _docOriService.PredictBatchAsync(imagesToPredict, token);
+            _logger.LogInformation("[JOB] Task {TaskId} — sending {Count} pages in {Batches} batches (batchSize={BatchSize})...",
+                taskId, totalPages, totalBatches, batchSize);
 
-            for (int i = 0; i < result.Predictions.Count && i < totalPages; i++)
+            for (int offset = 0; offset < imagesToPredict.Count; offset += batchSize)
             {
-                var prediction = result.Predictions[i];
-                int rawRot = 0;
+                var batch = imagesToPredict.Skip(offset).Take(batchSize).ToList();
 
-                if (int.TryParse(prediction.Orientation, out int parsedRot))
+                _logger.LogDebug("[JOB] Task {TaskId} — sending batch {Batch}/{Total} ({Count} pages)...",
+                    taskId, (offset / batchSize) + 1, totalBatches, batch.Count);
+
+                var result = await _docOriService.PredictBatchAsync(batch, token);
+
+                for (int i = 0; i < result.Predictions.Count && (offset + i) < totalPages; i++)
                 {
-                    rawRot = parsedRot;
-                    // Nếu Confidence < 0.7 thì ép về 0 độ (Default)
-                    rotations[i] = (prediction.Confidence >= 0.7) ? parsedRot : 0;
-                }
+                    var prediction = result.Predictions[i];
+                    int pageIdx = offset + i;
+                    int rawRot = 0;
 
-                _logger.LogDebug(
-                    "[JOB] Task {TaskId} Page {Page}: Raw={RawRot}°, Applied={AppliedRot}° (Confidence={Conf:F2})",
-                    taskId, i + 1, rawRot, rotations[i], prediction.Confidence);
+                    if (int.TryParse(prediction.Orientation, out int parsedRot))
+                    {
+                        rawRot = parsedRot;
+                        rotations[pageIdx] = (prediction.Confidence >= 0.7) ? parsedRot : 0;
+                    }
+
+                    _logger.LogDebug(
+                        "[JOB] Task {TaskId} Page {Page}: Raw={RawRot}°, Applied={AppliedRot}° (Confidence={Conf:F2})",
+                        taskId, pageIdx + 1, rawRot, rotations[pageIdx], prediction.Confidence);
+                }
             }
 
             _logger.LogInformation("[JOB] Task {TaskId} — orientation detection complete. Total={Total}, Rotated={Count}",

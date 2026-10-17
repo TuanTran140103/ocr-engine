@@ -26,7 +26,7 @@ services:
     image: tuantran2003/doc-ori:latest
     container_name: doc-ori
     ports:
-      - "8001:8000"
+      - "8003:8000"
     environment:
       - PYTHONUNBUFFERED=1
       - FLAGS_use_mkldnn=1

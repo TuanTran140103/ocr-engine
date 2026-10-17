@@ -12,4 +12,5 @@ public class LlmModelsOption
 {
     public ModelOption? DeepSeek { get; set; }
     public ModelOption? Chandra { get; set; }
+    public ModelOption? Dots { get; set; }
 }

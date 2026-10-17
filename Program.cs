@@ -15,8 +15,9 @@ using dotenv.net;
 using OCREngine.Utils;
 
 
+// Load .env into process environment variables BEFORE CreateBuilder
+// so builder.Configuration can pick them up via AddEnvironmentVariables()
 DotEnv.Load();
-
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,6 +52,14 @@ try
     builder.Services.Configure<LlmModelsOption>(builder.Configuration.GetSection("LlmModels"));
     builder.Services.Configure<HangfireOption>(builder.Configuration.GetSection("Hangfire"));
     builder.Services.Configure<ExternalServiceOption>(builder.Configuration.GetSection("ExternalServices"));
+    builder.Services.Configure<S3Options>(builder.Configuration.GetSection("S3"));
+    var s3Opts = builder.Configuration.GetSection("S3").Get<S3Options>();
+    if (s3Opts != null)
+    {
+        Log.Information("S3 Config: ServiceUrl={Url}, Region={Region}, ForcePathStyle={ForcePathStyle}, AccessKey={Ak}, SecretKey={Sk}",
+            s3Opts.ServiceUrl, s3Opts.Region, s3Opts.ForcePathStyle,
+            s3Opts.AccessKey, s3Opts.SecretKey);
+    }
 
     // Redis & Services
     var redisConn = builder.Configuration.GetSection("Hangfire:RedisConnection").Value
@@ -59,6 +68,7 @@ try
 
     builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConn));
     builder.Services.AddSingleton<IRedisService, RedisService>();
+    builder.Services.AddSingleton<IS3Service, S3Service>();
     builder.Services.AddSingleton<OpenAiClientFactory>();
 
 
@@ -81,6 +91,7 @@ try
 
     builder.Services.AddKeyedScoped<IBaseOcrEngine, DeepSeekOcrService>(LlmSupport.DeepSeekOcr);
     builder.Services.AddKeyedScoped<IBaseOcrEngine, ChandraOcrService>(LlmSupport.ChandraOcr);
+    builder.Services.AddKeyedScoped<IBaseOcrEngine, DotsOcrService>(LlmSupport.DotsOcr);
 
     builder.Services.AddHttpClient("OpenAIProvider", client =>
     {
@@ -98,6 +109,11 @@ try
     });
 
     builder.Services.AddHttpClient("ChandraOcr", client =>
+    {
+        client.Timeout = TimeSpan.FromMinutes(5);
+    });
+
+    builder.Services.AddHttpClient("DotsOcr", client =>
     {
         client.Timeout = TimeSpan.FromMinutes(5);
     });
@@ -120,7 +136,7 @@ try
                 })
         );
 
-        var ocrQueueNames = new[] { "deepseekocr", "chandraocr" };
+        var ocrQueueNames = new[] { "deepseekocr", "chandraocr", "dotsocr" };
 
         foreach (var queue in ocrQueueNames)
         {
@@ -131,7 +147,7 @@ try
                 options.Queues = new[] { queue };
             });
         }
-        Log.Information("Hangfire configured with shared worker pool for queues: deepseekocr, chandraocr");
+        Log.Information("Hangfire configured with shared worker pool for queues: deepseekocr, chandraocr, dotsocr");
     }
 
     builder.Services.AddControllers()
@@ -141,18 +157,7 @@ try
             options.JsonSerializerOptions.DictionaryKeyPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         });
     // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-    builder.Services.AddOpenApi(options =>
-    {
-        options.AddSchemaTransformer((schema, context, cancellationToken) =>
-        {
-            if (context.JsonTypeInfo.Type == typeof(IFormFile) || context.JsonTypeInfo.Type == typeof(IFormFileCollection))
-            {
-                schema.Type = "string";
-                schema.Format = "binary";
-            }
-            return Task.CompletedTask;
-        });
-    });
+    builder.Services.AddOpenApi();
 
     var app = builder.Build();
 

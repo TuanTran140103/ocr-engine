@@ -48,14 +48,22 @@ public class ChandraOcrService : BaseOcrEngine
         bool isRetry = request.FrequencyPenalty.HasValue;
 
         string promptRetry = """
-        Convert document to markdown. Do not caption images, diagram.
+        convert document to html. Ignore caption, describe, explain image, diagram.
+        """;
+
+        string promptMain = """
+        convert document to html. detect correct section-header, you must wrap it with h1, h2, h3, h4, h5, h6. 
+        Tables: Use colspan and rowspan attributes to match table structure.
+        Images: Include a description of any images in the alt attribute of an <img> tag. Do not fill out the src property. Describe in detail inside the div tag. Also convert charts to high fidelity data, and convert diagrams to mermaid.
+        Implicit Grid Layout: Look for vertical alignment of text blocks. If multiple text elements share the same horizontal starting points, treat the entire structure as a <table>. Do not convert structured layouts into plain text paragraphs.
         """;
 
         // 2 page đầu dùng PromptOcr, còn lại dùng PromptLayoutAndOcr
         // Khi retry thì luôn dùng PromptLayoutAndOcr
-        string fullPrompt = (request.PageIndex < 2 && !isRetry)
-            ? ChandraOcrPrompt.PromptOcr
-            : promptRetry;
+        // string fullPrompt = (request.PageIndex < 2 && !isRetry)
+        //     ? ChandraOcrPrompt.PromptLayoutAndOcr
+        //     : promptRetry;
+        string fullPrompt = isRetry ? promptRetry : promptMain;
 
         // Build message content: image first, then text (matching Python implementation)
         var contentItems = new List<ChatMessageContentItem>
@@ -75,12 +83,13 @@ public class ChandraOcrService : BaseOcrEngine
             {
                 new ChatRequestUserMessage(contentItems)
             },
-            Temperature = isRetry ? 0.2f : 0.0f,
-            MaxTokens = request.MaxTokens == 4096 ? 5000 : 5000
+            Temperature = isRetry ? 0.6f : 0.2f,
+            MaxTokens = request.MaxTokens == 4096 ? 5000 : 5000,
+            
         };
 
         // Set top_p = 0.1
-        options.AdditionalProperties["top_p"] = BinaryData.FromObjectAsJson(0.1f);
+        // options.AdditionalProperties["top_p"] = !isRetry ? BinaryData.FromObjectAsJson(0.1f) : BinaryData.FromObjectAsJson(0.4f);
 
         var response = await _chatClient!.CompleteAsync(options, cancellationToken);
         var chatCompletion = response.Value;

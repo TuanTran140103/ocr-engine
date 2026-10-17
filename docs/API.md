@@ -10,9 +10,9 @@ Tài liệu đặc tả API production cho OCREngine — Chỉ mô tả input/ou
 |-----------|---------|
 | **Base URL** | `http://{host}:{port}` (ví dụ: `http://localhost:5258`) |
 | **API Prefix** | `/api/ocr` |
-| **Content-Type (Request)** | `multipart/form-data` |
+| **Content-Type (Request)** | `application/json` |
 | **Content-Type (Response)** | `application/json` |
-| **File đầu vào** | PDF (`.pdf`) |
+| **File đầu vào** | 🔹 **Input:** `Bucket` + `ObjectKey` trên MinIO/S3 (PDF `.pdf`)<br/>🔹 **Download:** Job tự động tải file từ MinIO/S3 khi xử lý |
 | **Authentication** | Không yêu cầu (production cần bổ sung Bearer token) |
 
 ---
@@ -23,18 +23,28 @@ Tài liệu đặc tả API production cho OCREngine — Chỉ mô tả input/ou
 
 **Method:** `POST`
 **Endpoint:** `/api/ocr/process`
-**Content-Type:** `multipart/form-data`
+**Content-Type:** `application/json`
 
 #### Input
 
+```json
+{
+  "bucket": "my-bucket",
+  "objectKey": "uploads/document.pdf",
+  "modelId": "deepseekocr"
+}
+```
+
 | Field | Type | Required | Ràng buộc | Mô tả |
 |-------|------|----------|-----------|-------|
-| `File` | `IFormFile` | ✅ | File PDF hợp lệ, dung lượng > 0 byte | File tài liệu cần xử lý OCR. Tên file bất kỳ (ASCII/Unicode) |
+| `Bucket` | `string` | ✅ | Không được rỗng | Bucket chứa file trên MinIO/S3 |
+| `ObjectKey` | `string` | ✅ | Không được rỗng | Key/path của file PDF trong bucket. Job sẽ tự động download file từ MinIO/S3 về local để xử lý |
 | `ModelId` | `string` | ✅ | Phải thuộc danh sách supported models | Định danh model OCR sử dụng. Phân biệt chữ hoa/thường, sẽ được trim và lowercase trước khi xử lý |
 
 **Giá trị hợp lệ của `ModelId`:**
 - `deepseekocr`
 - `chandraocr`
+- `dotsocr`
 
 #### Output
 
@@ -42,7 +52,7 @@ Tài liệu đặc tả API production cho OCREngine — Chỉ mô tả input/ou
 ```json
 {
   "taskId": "serverabc-550e8400-e29b-41d4-a716-446655440000",
-  "message": "File uploaded and queued."
+  "message": "File queued for processing from S3 storage."
 }
 ```
 
@@ -53,35 +63,31 @@ Tài liệu đặc tả API production cho OCREngine — Chỉ mô tả input/ou
 
 **Status: 400 Bad Request**
 ```
-"No file uploaded."
+"Bucket is required."
 ```
 hoặc
 ```
-"ModelId 'xxx' is not supported. Supported models: deepseekocr, chandraocr"
+"ObjectKey is required."
+```
+hoặc
+```
+"ModelId 'xxx' is not supported. Supported models: deepseekocr, chandraocr, dotsocr"
 ```
 
 | Tình huống | Nguyên nhân |
 |-----------|-------------|
-| `"No file uploaded."` | Field `File` trống hoặc file có `Length = 0` |
+| `"Bucket is required."` | Field `Bucket` trống |
+| `"ObjectKey is required."` | Field `ObjectKey` trống |
 | `"ModelId 'xxx' is not supported..."` | `ModelId` không nằm trong danh sách supported models |
-
-**Status: 409 Conflict**
-```
-"File 'document.pdf' is already being processed or exists in temporary storage."
-```
-
-| Tình huống | Nguyên nhân |
-|-----------|-------------|
-| File cùng tên (`originalFileName`) đã tồn tại trong thư mục tạm hoặc đang được xử lý | Tránh trùng lặp khi client gửi lại request chưa hoàn tất |
 
 **Status: 500 Internal Server Error**
 ```
-"Internal server error during upload."
+"Internal server error."
 ```
 
 | Tình huống | Nguyên nhân |
 |-----------|-------------|
-| Lỗi khi lưu file, enqueue job, hoặc exception không xử lý được | File tạm sẽ tự động dọn (cleanup) |
+| Lỗi khi enqueue job hoặc exception không xử lý được | - |
 
 ---
 
@@ -490,7 +496,7 @@ Chỉ gọi endpoint này khi nhận được event có **`status = "Succeeded"`
 ```json
 {
   "taskId": "string",
-  "message": "string"
+  "message": "File queued for processing from S3 storage."
 }
 ```
 
